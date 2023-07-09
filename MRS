@@ -1,0 +1,48 @@
+import numpy as np
+from scipy.sparse import lil_matrix
+from sklearn.decomposition import TruncatedSVD
+from sklearn.metrics.pairwise import cosine_similarity
+
+class MovieRecommender:
+    def _init_(self, num_factors=10):
+        self.num_factors = num_factors
+        self.user_movie_matrix = None
+        self.movie_similarity_matrix = None
+
+    def fit(self, ratings):
+        # Create the user-movie matrix
+        self.user_movie_matrix = lil_matrix((ratings["user_id"].nunique(), ratings["movie_id"].nunique()))
+        for _, row in ratings.iterrows():
+            self.user_movie_matrix[row["user_id"] - 1, row["movie_id"] - 1] = row["rating"]
+
+        # Perform matrix factorization using SVD
+        svd = TruncatedSVD(n_components=self.num_factors)
+        self.user_movie_matrix = svd.fit_transform(self.user_movie_matrix)
+
+        # Compute movie similarity using cosine similarity
+        self.movie_similarity_matrix = cosine_similarity(self.user_movie_matrix)
+
+    def predict(self, user_id, top_n=5):
+        # Get the user's ratings and similarity scores
+        user_ratings = self.user_movie_matrix[user_id - 1]
+        similarity_scores = self.movie_similarity_matrix
+
+        # Calculate the predicted ratings based on similarity scores
+        predicted_ratings = np.dot(similarity_scores, user_ratings)
+        predicted_ratings /= np.sum(similarity_scores, axis=1)
+
+        # Get the top N movie recommendations
+        top_indices = np.argsort(predicted_ratings)[-top_n:][::-1]
+        return top_indices + 1  # Adjust indices to movie_id
+
+# Example usage
+ratings = pd.read_csv("ratings.csv")  # Assuming you have a CSV file containing ratings data
+
+recommender = MovieRecommender(num_factors=10)
+recommender.fit(ratings)
+
+user_id = 1
+top_recommendations = recommender.predict(user_id, top_n=5)
+print("Top recommendations for user", user_id, ":")
+for movie_id in top_recommendations:
+    print("Movie ID:", movie_id)
